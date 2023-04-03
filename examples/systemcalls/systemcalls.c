@@ -1,3 +1,14 @@
+#define _XOPEN_SOURCE /* if we want WEXITSTATUS, etc. */
+#include <stdlib.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <syslog.h>
+#include <string.h>
+
 #include "systemcalls.h"
 
 /**
@@ -16,8 +27,8 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
-
-    return true;
+    int ret = system(cmd);
+    return (ret != -1) && (0 == WEXITSTATUS(ret));
 }
 
 /**
@@ -47,8 +58,8 @@ bool do_exec(int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
-
+    //command[count] = command[count];
+    va_end(args);
 /*
  * TODO:
  *   Execute a system command by calling fork, execv(),
@@ -58,11 +69,31 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    int status;
+    int child_status;
+    pid_t pid;
+    pid = fork();
+    if (pid == -1)
+	    return false;
+    else if (pid == 0) {
+        child_status = execv(command[0], command);
+        if (child_status == -1)
+	        perror("child failed");
+	    exit(EXIT_FAILURE);
+    } 
 
-    va_end(args);
+    
+    if (wait(&status) == -1) 
+        return false;
+        
+    if (WIFEXITED(status)) {
+        return (WEXITSTATUS(status) == EXIT_SUCCESS);
+    }
 
-    return true;
+    return false;
 }
+
+
 
 /**
 * @param outputfile - The full path to the file to write with command output.
@@ -84,7 +115,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     // and may be removed
     command[count] = command[count];
 
-
+    va_end(args);
 /*
  * TODO
  *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624 as a refernce,
@@ -93,7 +124,32 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *
 */
 
-    va_end(args);
+    int status;
+	int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+	if (fd < 0)
+		return false;
 
-    return true;
+	int child_pid = fork();
+	switch (child_pid) {
+	    case -1:
+		    return false;
+	    case 0:	
+		    if (dup2(fd, 1) < 0)
+			    return false;
+		    close(fd);
+		    if (execv(command[0],command) == -1)
+		        return false;
+		    break;
+		default: 
+	        if (wait(&status) == -1)
+		        return false;
+		    
+	}
+	
+	close(fd);
+	if (WIFEXITED(status)) {
+        return (WEXITSTATUS(status) == EXIT_SUCCESS);
+    }
+	
+	return false;
 }
