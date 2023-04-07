@@ -13,7 +13,32 @@ void* threadfunc(void* thread_param)
 
     // TODO: wait, obtain mutex, wait, release mutex as described by thread_data structure
     // hint: use a cast like the one below to obtain thread arguments from your parameter
-    //struct thread_data* thread_func_args = (struct thread_data *) thread_param;
+    struct thread_data* thread_func_args = (struct thread_data *) thread_param;
+
+    // wait
+    usleep(thread_func_args->wait_to_obtain_ms * 1000);
+    
+    // obtain mutex
+    int rc = pthread_mutex_lock(thread_func_args->mutex);
+    if (rc != 0) {
+        ERROR_LOG("Failed to lock thread with %d\n", rc);
+        thread_func_args->thread_complete_success = false;
+        return thread_param;
+    }
+    
+    // wait
+    usleep(thread_func_args->wait_to_release_ms * 1000);
+    
+    // release mutex
+    rc = pthread_mutex_unlock(thread_func_args->mutex);
+    if (rc != 0) {
+        ERROR_LOG("Failed to unlock thread with %d\n", rc);
+        thread_func_args->thread_complete_success = false;
+        return thread_param;
+    }
+
+    
+    thread_func_args->thread_complete_success = true;
     return thread_param;
 }
 
@@ -28,6 +53,23 @@ bool start_thread_obtaining_mutex(pthread_t *thread, pthread_mutex_t *mutex,int 
      *
      * See implementation details in threading.h file comment block
      */
-    return false;
+     
+    // allocate memory for thread_data
+    struct thread_data* thread_func_args = malloc(sizeof(struct thread_data));
+    
+    // setup mutex and wait arguments
+    thread_func_args->mutex = mutex;
+    thread_func_args->wait_to_obtain_ms = wait_to_obtain_ms;
+    thread_func_args->wait_to_release_ms = wait_to_release_ms;
+    thread_func_args->thread_complete_success = false;
+    
+    // pass thread_data to created thread using threadfunc() as entry point
+    int rc = pthread_create(thread, NULL /*use default attributes*/, threadfunc, thread_func_args);
+    if (rc != 0) {
+        ERROR_LOG("Failed to create thread with %d\n", rc);
+        return false;
+    }
+    
+    return true;
 }
 
