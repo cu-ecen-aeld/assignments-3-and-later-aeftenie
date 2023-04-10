@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # param 1 = directory aka filesdir
 # param 2 = text to searsh aka searchstr
 filesdir=$1
